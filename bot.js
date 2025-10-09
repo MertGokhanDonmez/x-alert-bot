@@ -3,10 +3,10 @@ import { TwitterApi } from "twitter-api-v2";
 
 // X API credentials
 const client = new TwitterApi({
-  appKey: "YOUR_API_KEY",
-  appSecret: "YOUR_API_SECRET",
-  accessToken: "YOUR_ACCESS_TOKEN",
-  accessSecret: "YOUR_ACCESS_SECRET",
+  appKey: "NRDXoXeKtRYqzSY054kx3DKPm",
+  appSecret: "6ozyLLNZNVKMpqb8Oao1jqG7yAiNRFXHRzoighNA4Ll3yKi3rE",
+  accessToken: "1976073444010725376-nG3UdJHTQqFFyaDtHEKIIOj2GSPgVC",
+  accessSecret: "5Eufc0UXHcY4S1PMG1o7CrZ0VgHOxpXZ1j1bHnLDixGXI",
 });
 
 const rwClient = client.readWrite;
@@ -52,7 +52,7 @@ ws.on("message", async (msg) => {
       console.log(alert);
 
       try {
-        // await rwClient.v2.tweet(alert);
+        await rwClient.v2.tweet(alert);
         console.log(alert);
       } catch (err) {
         console.error("Error posting tweet:", err);
