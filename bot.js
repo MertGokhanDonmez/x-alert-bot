@@ -13,12 +13,14 @@ const rwClient = client.readWrite;
 
 // abnormal thresholds (%)
 const thresholds = {
-  btcusdt: 0.1,
-  ethusdt: 0.5,
-  xrpusdt: 8.0,
+  btcusdt: 1.0,
+  ethusdt: 1.0,
+  xrpusdt: 2.0,
 };
 
-const lastPrices = {};
+const firstPrice = {};
+let firstTimestamp = null;
+const alertState = {};
 
 // Binance WebSocket endpoint
 const ws = new WebSocket("wss://stream.binance.com:9443/ws");
@@ -41,25 +43,51 @@ ws.on("message", async (msg) => {
 
   const symbol = data.s.toLowerCase(); // e.g. BTCUSDT -> btcusdt
   const price = parseFloat(data.c);
+  const time = data.E; // event time
 
-  if (lastPrices[symbol]) {
-    const change = ((price - lastPrices[symbol]) / lastPrices[symbol]) * 100;
-    if (Math.abs(change) >= thresholds[symbol]) {
-      const direction = change > 0 ? "UP" : "DOWN";
-      const alert = `⚠️ ${symbol.toUpperCase()} abnormal move: ${change.toFixed(
-        2
-      )}% ${direction} (last: ${price.toFixed(2)} USDT)`;
-      console.log(alert);
-
-      try {
-        await rwClient.v2.tweet(alert);
-        console.log(alert);
-      } catch (err) {
-        console.error("Error posting tweet:", err);
-      }
-    }
+  // Record the first price and time for each symbol
+  if (!(symbol in firstPrice)) {
+    firstPrice[symbol] = price;
+    firstTimestamp = time;
+    alertState[symbol] = false;
+    console.log(
+      "Started tracking",
+      symbol,
+      "at:",
+      new Date(time),
+      "Price:",
+      price
+    );
+    return;
   }
-  lastPrices[symbol] = price;
+
+  // if a minute has passed, reset the base price and time for this symbol
+  if (time - firstTimestamp >= 60 * 1000) {
+    firstPrice[symbol] = price;
+    firstTimestamp = time;
+    alertState[symbol] = false;
+  }
+
+  // change percentage
+  const diff = ((price - firstPrice[symbol]) / firstPrice[symbol]) * 100;
+
+  if (!alertState[symbol] && Math.abs(diff) >= thresholds[symbol]) {
+    const direction = diff > 0 ? "UP" : "DOWN";
+    const alert = `${
+      direction == "UP" ? "🚀" : "🔻"
+    } ${symbol.toUpperCase()} abnormal move: ${diff.toFixed(
+      2
+    )}% ${direction} (last: ${price.toFixed(2)} USDT)`;
+    console.log(alert);
+
+    try {
+      await rwClient.v2.tweet(alert);
+      console.log(alert);
+    } catch (err) {
+      console.error("Error posting tweet:", err);
+    }
+    alertState[symbol] = true; // set alert state to true to avoid repeated alerts for this symbol
+  }
 });
 
 // On error
