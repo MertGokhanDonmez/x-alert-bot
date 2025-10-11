@@ -13,9 +13,9 @@ const rwClient = client.readWrite;
 
 // abnormal thresholds (%)
 const thresholds = {
-  btcusdt: 1.0,
-  ethusdt: 1.0,
-  xrpusdt: 2.0,
+  btcusdt: 3.0,
+  ethusdt: 3.0,
+  xrpusdt: 5.0,
 };
 
 const firstPrice = {};
@@ -61,8 +61,8 @@ ws.on("message", async (msg) => {
     return;
   }
 
-  // if a minute has passed, reset the base price and time for this symbol
-  if (time - firstTimestamp >= 60 * 1000) {
+  // if an hour has passed, reset the base price and time for this symbol
+  if (time - firstTimestamp >= 60 * 60 * 1000) {
     firstPrice[symbol] = price;
     firstTimestamp = time;
     alertState[symbol] = false;
@@ -75,7 +75,7 @@ ws.on("message", async (msg) => {
     const direction = diff > 0 ? "UP" : "DOWN";
     const alert = `${
       direction == "UP" ? "🚀" : "🔻"
-    } ${symbol.toUpperCase()} abnormal move: ${diff.toFixed(
+    } ${symbol.toUpperCase()} moved in an hour ${diff.toFixed(
       2
     )}% ${direction} (last: ${price.toFixed(2)} USDT)`;
     console.log(alert);
