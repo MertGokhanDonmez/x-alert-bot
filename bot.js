@@ -40,6 +40,7 @@ ws.on("open", () => {
 ws.on("message", async (msg) => {
   const data = JSON.parse(msg);
   if (!data.s || !data.c) return; // not a ticker event
+  console.log(data);
 
   const symbol = data.s.toLowerCase(); // e.g. BTCUSDT -> btcusdt
   const price = parseFloat(data.c);
@@ -66,23 +67,10 @@ ws.on("message", async (msg) => {
   //   firstPrice[symbol] = price;
   //   firstTimestamp = time;
   //   alertState[symbol] = false;
-  //   console.log(new Date(time).toString());
   // }
 
-  // change percentage
-  // const diff = ((price - firstPrice[symbol]) / firstPrice[symbol]) * 100;
-
-  // if (!alertState[symbol] && Math.abs(diff) >= thresholds[symbol]) {
-
   const diff = data.P; // price change percent in the last 1 hour
-  const openTime = data.O; // ticker open time
-  const closeTime = data.C; // ticker close time
-  const highPrice = data.h; // high price in the last 1 hour
-  const lowPrice = data.l; // low price in the last 1 hour
-  const volume = data.v; // total traded base asset volume
-  const quoteVolume = data.q; // total traded quote asset volume
 
-  // if (openTime >)
   if (Math.abs(diff) >= thresholds[symbol]) {
     const direction = diff > 0 ? "UP" : "DOWN";
     const alert = `${
@@ -90,14 +78,15 @@ ws.on("message", async (msg) => {
     } ${symbol.toUpperCase()} moved in an hour ${diff}% ${direction} (last: ${price.toFixed(
       2
     )} USDT)`;
+
     console.log(alert);
 
-    // try {
-    //   await rwClient.v2.tweet(alert);
-    //   console.log(alert);
-    // } catch (err) {
-    //   console.error("Error posting tweet:", err);
-    // }
+    try {
+      await rwClient.v2.tweet(alert);
+      console.log(alert);
+    } catch (err) {
+      console.error("Error posting tweet:", err);
+    }
     alertState[symbol] = true; // set alert state to true to avoid repeated alerts for this symbol
   }
 });
