@@ -13,8 +13,8 @@ const rwClient = client.readWrite;
 
 // abnormal thresholds (%)
 const thresholds = {
-  btcusdt: 0.01,
-  ethusdt: 0.01,
+  btcusdt: 3.0,
+  ethusdt: 3.0,
   xrpusdt: 5.0,
 };
 
@@ -36,6 +36,10 @@ function priceChangeListenSocket() {
     const price = parseFloat(data.c);
     const currentTime = data.E; // event time
 
+    percentage[symbol] = firstPrice[symbol]
+      ? ((price - firstPrice[symbol]) / firstPrice[symbol]) * 100
+      : 0;
+
     // Record the first price and time for each symbol
     if (!(symbol in firstPrice)) {
       firstPrice[symbol] = price;
@@ -53,38 +57,45 @@ function priceChangeListenSocket() {
     }
 
     // if an hour has passed, reset the base price and time for this symbol
-    if (calcNextFullHour()) {
-      percentage[symbol] = firstPrice[symbol]
-        ? ((price - firstPrice[symbol]) / firstPrice[symbol]) * 100
-        : 0;
+    setTimeout(() => {
       firstPrice[symbol] = price;
       firstTimestamp = currentTime;
       alertState[symbol] = false;
-      console.log("tam saat", percentage[symbol]);
-    }
+      console.log("Resetting base price for", symbol, "to", price);
+    }, calcNextFullHour());
 
-    if (
-      Math.abs(percentage[symbol]) >= thresholds[symbol] &&
-      !alertState[symbol]
-    ) {
-      const direction = percentage[symbol] > 0 ? "UP" : "DOWN";
-      const alert = `${
-        direction == "UP" ? "🚀" : "🔻"
-      } ${symbol.toUpperCase()} moved in an hour ${
-        percentage[symbol]
-      }% ${direction} (last: ${price.toFixed(2)} USDT)`;
-
-      sendTweet(alert);
-      alertState[symbol] = true; // set alert state to true to avoid repeated alerts for this symbol
-    }
+    handleThresholdExceed(symbol, price);
   });
+}
+
+function handleThresholdExceed(symbol, price) {
+  if (
+    Math.abs(percentage[symbol]) >= thresholds[symbol] &&
+    !alertState[symbol]
+  ) {
+    const alert = manageMessageText(percentage[symbol], symbol, price);
+    console.log(alert);
+
+    sendTweet(alert);
+    alertState[symbol] = true; // set alert state to true to avoid repeated alerts for this symbol
+  }
+}
+
+function manageMessageText(symbolPercentage, symbol, price) {
+  const direction = symbolPercentage > 0 ? "UP" : "DOWN";
+  const alert = `${
+    direction == "UP" ? "🚀" : "🔻"
+  } ${symbol.toUpperCase()} moved in an hour ${symbolPercentage}% ${direction} (last: ${price.toFixed(
+    2
+  )} USDT)`;
+  return alert;
 }
 
 async function sendTweet(message) {
   //send tweet
   try {
     await rwClient.v2.tweet(message);
-    console.log(message);
+    console.log("tweet has been sent.");
   } catch (err) {
     console.error("Error posting tweet:", err);
   }
@@ -93,7 +104,7 @@ async function sendTweet(message) {
 function calcNextFullHour() {
   const now = new Date();
   const nextFullHour = new Date(now);
-  nextFullHour.setHours(now.getHours() + 1, 0, 0, 0);
+  nextFullHour.setMinutes(now.getMinutes() + 1, 0, 0);
   const msUntilNextHour = nextFullHour - now;
 
   return msUntilNextHour;
@@ -101,7 +112,7 @@ function calcNextFullHour() {
 
 // On open, subscribe to tickers
 function websocketConnection() {
-  ws.on("open", () => {
+  const subscribe = () => {
     const params = {
       method: "SUBSCRIBE",
       params: ["btcusdt@ticker_1h", "ethusdt@ticker_1h", "xrpusdt@ticker_1h"],
@@ -109,20 +120,25 @@ function websocketConnection() {
     };
     ws.send(JSON.stringify(params));
     console.log("Connected and subscribed.");
-  });
+  };
+
+  if (ws.readyState === WebSocket.OPEN) {
+    subscribe();
+  } else {
+    ws.once("open", subscribe); // avoid duplicate subscriptions
+  }
 }
 
 function firstStart() {
   const msUntilNextHour = calcNextFullHour();
   console.log(
-    `Bot is going to start in ${(msUntilNextHour / 1000 / 60).toFixed(
-      1
-    )} minutes.`
+    `Bot is going to start in ${(msUntilNextHour / 1000).toFixed(1)} minutes.`
   );
 
   setTimeout(() => {
     websocketConnection();
     priceChangeListenSocket();
+    console.log("Bot started");
   }, msUntilNextHour);
 }
 
