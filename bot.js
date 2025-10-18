@@ -104,7 +104,7 @@ async function sendTweet(message) {
 function calcNextFullHour() {
   const now = new Date();
   const nextFullHour = new Date(now);
-  nextFullHour.setMinutes(now.getMinutes() + 1, 0, 0);
+  nextFullHour.setHours(now.getHours() + 1, 0, 0, 0);
   const msUntilNextHour = nextFullHour - now;
 
   return msUntilNextHour;
@@ -132,7 +132,9 @@ function websocketConnection() {
 function firstStart() {
   const msUntilNextHour = calcNextFullHour();
   console.log(
-    `Bot is going to start in ${(msUntilNextHour / 1000).toFixed(1)} minutes.`
+    `Bot is going to start in ${(msUntilNextHour / 1000 / 60).toFixed(
+      1
+    )} minutes.`
   );
 
   setTimeout(() => {
