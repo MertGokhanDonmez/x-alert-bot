@@ -1,5 +1,6 @@
 import WebSocket from "ws";
 import { TwitterApi } from "twitter-api-v2";
+import { EventEmitter } from "events";
 
 // X API credentials
 const client = new TwitterApi({
@@ -19,9 +20,13 @@ const thresholds = {
 };
 
 const firstPrice = {};
-let firstTimestamp = null;
 const alertState = {};
 const percentage = {};
+const lastPrice = {};
+
+const hourEvents = new EventEmitter();
+let hourTimer = null;
+let currentHourTarget = null;
 
 // Binance WebSocket endpoint
 const ws = new WebSocket("wss://stream.binance.com:9443/ws");
@@ -43,7 +48,6 @@ function priceChangeListenSocket() {
     // Record the first price and time for each symbol
     if (!(symbol in firstPrice)) {
       firstPrice[symbol] = price;
-      firstTimestamp = currentTime;
       alertState[symbol] = false;
       console.log(
         "Started tracking",
@@ -55,14 +59,6 @@ function priceChangeListenSocket() {
       );
       return;
     }
-
-    // if an hour has passed, reset the base price and time for this symbol
-    setTimeout(() => {
-      firstPrice[symbol] = price;
-      firstTimestamp = currentTime;
-      alertState[symbol] = false;
-      console.log("Resetting base price for", symbol, "to", price);
-    }, calcNextFullHour());
 
     handleThresholdExceed(symbol, price);
   });
@@ -76,7 +72,7 @@ function handleThresholdExceed(symbol, price) {
     const alert = manageMessageText(percentage[symbol], symbol, price);
     console.log(alert);
 
-    sendTweet(alert);
+    // sendTweet(alert);
     alertState[symbol] = true; // set alert state to true to avoid repeated alerts for this symbol
   }
 }
@@ -110,6 +106,38 @@ function calcNextFullHour() {
   return msUntilNextHour;
 }
 
+// Top-of-hour scheduler (recurring)
+function scheduleHourTick() {
+  const ms = calcNextFullHour();
+  currentHourTarget = new Date(Date.now() + ms);
+
+  clearTimeout(hourTimer);
+  hourTimer = setTimeout(() => {
+    // Emit top-of-hour event with time
+    hourEvents.emit("hour", currentHourTarget);
+
+    // Reset base prices at top of hour (use last seen)
+    Object.keys(firstPrice).forEach((symbol) => {
+      if (lastPrice[symbol] != null) {
+        firstPrice[symbol] = lastPrice[symbol];
+      }
+      alertState[symbol] = false;
+      percentage[symbol] = 0;
+    });
+
+    console.log("Base prices reset at hour:", currentHourTarget.toISOString());
+
+    // Schedule next hour
+    scheduleHourTick();
+  }, ms);
+}
+
+// Use this event for your tasks:
+hourEvents.on("hour", (when) => {
+  priceChangeListenSocket();
+  // console.log("[hour event]", when.toISOString());
+});
+
 // On open, subscribe to tickers
 function websocketConnection() {
   const subscribe = () => {
@@ -140,6 +168,7 @@ function firstStart() {
   setTimeout(() => {
     websocketConnection();
     priceChangeListenSocket();
+    scheduleHourTick();
     console.log("Bot started");
   }, msUntilNextHour);
 }
