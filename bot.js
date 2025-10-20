@@ -32,7 +32,6 @@ let currentHourTarget = null;
 const ws = new WebSocket("wss://stream.binance.com:9443/ws");
 
 function priceChangeListenSocket() {
-  // On message, process price updates
   ws.on("message", async (msg) => {
     const data = JSON.parse(msg);
     if (!data.s || !data.c) return; // not a ticker event
@@ -72,7 +71,7 @@ function handleThresholdExceed(symbol, price) {
     const alert = manageMessageText(percentage[symbol], symbol, price);
     console.log(alert);
 
-    // sendTweet(alert);
+    sendTweet(alert);
     alertState[symbol] = true; // set alert state to true to avoid repeated alerts for this symbol
   }
 }
@@ -100,7 +99,7 @@ async function sendTweet(message) {
 function calcNextFullHour() {
   const now = new Date();
   const nextFullHour = new Date(now);
-  nextFullHour.setHours(now.getHours() + 1, 0, 0, 0);
+  nextFullHour.setHours(now.getHours() + 1, 0, 0);
   const msUntilNextHour = nextFullHour - now;
 
   return msUntilNextHour;
@@ -158,19 +157,12 @@ function websocketConnection() {
 }
 
 function firstStart() {
-  const msUntilNextHour = calcNextFullHour();
+  const ms = calcNextFullHour();
+  websocketConnection();
+  scheduleHourTick();
   console.log(
-    `Bot is going to start in ${(msUntilNextHour / 1000 / 60).toFixed(
-      1
-    )} minutes.`
+    `Bot is going to start in ${new Date(Date.now() + ms).toString()}`
   );
-
-  setTimeout(() => {
-    websocketConnection();
-    priceChangeListenSocket();
-    scheduleHourTick();
-    console.log("Bot started");
-  }, msUntilNextHour);
 }
 
 firstStart();
