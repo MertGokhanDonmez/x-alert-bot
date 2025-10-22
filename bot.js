@@ -12,17 +12,25 @@ const client = new TwitterApi({
 
 const rwClient = client.readWrite;
 
-// abnormal thresholds (%)
+const base = {
+  firstPrice: 0,
+  lastPrice: 0,
+  percentage: 0,
+  alertState: false,
+};
+
 const thresholds = {
   btcusdt: 3.0,
   ethusdt: 3.0,
   xrpusdt: 5.0,
 };
 
-const firstPrice = {};
-const alertState = {};
-const percentage = {};
-const lastPrice = {};
+const symbols = Object.fromEntries(
+  Object.entries(thresholds).map(([symbol, threshold]) => [
+    symbol,
+    { ...base, threshold },
+  ])
+);
 
 const hourEvents = new EventEmitter();
 let hourTimer = null;
@@ -38,26 +46,12 @@ function priceChangeListenSocket() {
 
     const symbol = data.s.toLowerCase(); // e.g. BTCUSDT -> btcusdt
     const price = parseFloat(data.c);
-    const currentTime = data.E; // event time
+    symbols[symbol].lastPrice = price;
 
-    percentage[symbol] = firstPrice[symbol]
-      ? ((price - firstPrice[symbol]) / firstPrice[symbol]) * 100
+    symbols[symbol].percentage = symbols[symbol].firstPrice
+      ? ((price - symbols[symbol].firstPrice) / symbols[symbol].firstPrice) *
+        100
       : 0;
-
-    // Record the first price and time for each symbol
-    if (!(symbol in firstPrice)) {
-      firstPrice[symbol] = price;
-      alertState[symbol] = false;
-      console.log(
-        "Started tracking",
-        symbol,
-        "at:",
-        new Date(currentTime).toString(),
-        "Price:",
-        price
-      );
-      return;
-    }
 
     handleThresholdExceed(symbol, price);
   });
@@ -65,14 +59,13 @@ function priceChangeListenSocket() {
 
 function handleThresholdExceed(symbol, price) {
   if (
-    Math.abs(percentage[symbol]) >= thresholds[symbol] &&
-    !alertState[symbol]
+    Math.abs(symbols[symbol].percentage) >= symbols[symbol].threshold &&
+    !symbols[symbol].alertState
   ) {
-    const alert = manageMessageText(percentage[symbol], symbol, price);
+    const alert = manageMessageText(symbols[symbol].percentage, symbol, price);
     console.log(alert);
-
     sendTweet(alert);
-    alertState[symbol] = true; // set alert state to true to avoid repeated alerts for this symbol
+    symbols[symbol].alertState = false;
   }
 }
 
@@ -99,7 +92,7 @@ async function sendTweet(message) {
 function calcNextFullHour() {
   const now = new Date();
   const nextFullHour = new Date(now);
-  nextFullHour.setHours(now.getHours() + 1, 0, 0);
+  nextFullHour.setMinutes(now.getMinutes() + 1, 0, 0);
   const msUntilNextHour = nextFullHour - now;
 
   return msUntilNextHour;
@@ -113,16 +106,7 @@ function scheduleHourTick() {
   clearTimeout(hourTimer);
   hourTimer = setTimeout(() => {
     // Emit top-of-hour event with time
-    hourEvents.emit("hour", currentHourTarget);
-
-    // Reset base prices at top of hour (use last seen)
-    Object.keys(firstPrice).forEach((symbol) => {
-      if (lastPrice[symbol] != null) {
-        firstPrice[symbol] = lastPrice[symbol];
-      }
-      alertState[symbol] = false;
-      percentage[symbol] = 0;
-    });
+    hourEvents.emit("hour");
 
     console.log("Base prices reset at hour:", currentHourTarget.toISOString());
 
@@ -131,9 +115,16 @@ function scheduleHourTick() {
   }, ms);
 }
 
-// Use this event for your tasks:
-hourEvents.on("hour", (when) => {
-  priceChangeListenSocket();
+function resetAllValues() {
+  for (const symbol in symbols) {
+    symbols[symbol].alertState = false;
+    symbols[symbol].firstPrice = symbols[symbol].lastPrice;
+    symbols[symbol].percentage = 0;
+  }
+}
+
+hourEvents.on("hour", () => {
+  resetAllValues();
   // console.log("[hour event]", when.toISOString());
 });
 
@@ -158,7 +149,9 @@ function websocketConnection() {
 
 function firstStart() {
   const ms = calcNextFullHour();
+
   websocketConnection();
+  priceChangeListenSocket();
   scheduleHourTick();
   console.log(
     `Bot is going to start in ${new Date(Date.now() + ms).toString()}`
