@@ -92,7 +92,7 @@ async function sendTweet(message) {
 function calcNextFullHour() {
   const now = new Date();
   const nextFullHour = new Date(now);
-  nextFullHour.setMinutes(now.getMinutes() + 1, 0, 0);
+  nextFullHour.setHours(now.getHours() + 1, 0, 0, 0);
   const msUntilNextHour = nextFullHour - now;
 
   return msUntilNextHour;
