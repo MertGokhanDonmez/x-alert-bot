@@ -12,26 +12,39 @@ const client = new TwitterApi({
 
 const rwClient = client.readWrite;
 
-const base = {
-  firstPrice: 0,
-  lastPrice: 0,
-  percentage: 0,
-  alertState: false,
-};
-
-const day = { base };
-const hour = { base };
-
 const thresholds = {
   btcusdt: 3.0,
   ethusdt: 3.0,
   xrpusdt: 5.0,
 };
 
+// Create a fresh symbol object to avoid shared references
+function createSymbolData(threshold) {
+  return {
+    day: {
+      base: {
+        firstPrice: 0,
+        lastPrice: 0,
+        percentage: 0,
+        alertState: false,
+      },
+    },
+    hour: {
+      base: {
+        firstPrice: 0,
+        lastPrice: 0,
+        percentage: 0,
+        alertState: false,
+      },
+    },
+    threshold,
+  };
+}
+
 const symbols = Object.fromEntries(
   Object.entries(thresholds).map(([symbol, threshold]) => [
     symbol,
-    { day, hour, threshold },
+    createSymbolData(threshold),
   ]),
 );
 
